@@ -69,6 +69,7 @@ balloc(uint dev)
   struct buf *bp;
 
   bp = 0;
+  // 遍历所有的block，找到一个空闲的block(遍历bitmap)
   for(b = 0; b < sb.size; b += BPB){
     bp = bread(dev, BBLOCK(b, sb));
     for(bi = 0; bi < BPB && b + bi < sb.size; bi++){
@@ -382,10 +383,12 @@ iunlockput(struct inode *ip)
 static uint
 bmap(struct inode *ip, uint bn)
 {
+  // block number 是逻辑上的block number
   uint addr, *a;
   struct buf *bp;
 
   if(bn < NDIRECT){
+    // Load direct block, allocating if necessary.
     if((addr = ip->addrs[bn]) == 0){
       addr = balloc(ip->dev);
       if(addr == 0)
@@ -397,13 +400,15 @@ bmap(struct inode *ip, uint bn)
   bn -= NDIRECT;
 
   if(bn < NINDIRECT){
-    // Load indirect block, allocating if necessary.
+    // Load indirect first block, allocating if necessary.
     if((addr = ip->addrs[NDIRECT]) == 0){
       addr = balloc(ip->dev);
       if(addr == 0)
         return 0;
       ip->addrs[NDIRECT] = addr;
     }
+    // load indirect second block , allocating if necessary
+    // 要通过 block num ,使用buffer cache来读取indirect second block
     bp = bread(ip->dev, addr);
     a = (uint*)bp->data;
     if((addr = a[bn]) == 0){
@@ -412,6 +417,31 @@ bmap(struct inode *ip, uint bn)
         a[bn] = addr;
         log_write(bp);
       }
+    }
+    brelse(bp);
+    return addr;
+  }
+
+  bn -=NINDIRECT;
+  if(bn<NDBINDIRECT){
+    // load double indirect block, allocating if necessary
+    uint index_1 = bn/NINDIRECT;// 通过除法获得二级索引的block number
+    uint index_2 = bn%NINDIRECT;// 通过取余获得一级索引的block number
+    // bn 是逻辑上的block number，真实的block num 通过索引ip->addrs[xxx]来获得。为啥ip->addrs[xxx]记录了物理block num ？ 因为这是balloc()在分配blocl时，就将物理block num写入了inode的addrs[]中
+    if ((addr = ip->addrs[NDIRECT+1]) == 0)
+        ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if ((addr = a[index_1]) == 0) {
+        a[index_1] = addr = balloc(ip->dev);
+        log_write(bp);
+    }
+    brelse(bp);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if ((addr = a[index_2]) == 0) {
+        a[index_2] = addr = balloc(ip->dev);
+        log_write(bp);
     }
     brelse(bp);
     return addr;
@@ -446,6 +476,29 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if(ip->addrs[NINDIRECT]){
+    bp = bread(ip->dev, ip->addrs[NINDIRECT]);
+    a = (uint*)bp->data;
+    for(j = 0; j < NINDIRECT; j++){
+      if(a[j]){
+        struct buf *bp2 = bread(ip->dev, a[j]);
+        uint *a2 = (uint*)bp2->data;
+        // 释放三级索引的block
+        for(int k = 0; k < NINDIRECT; k++){
+          if(a2[k])
+            bfree(ip->dev, a2[k]);
+        }
+        brelse(bp2);
+        // 释放二级索引的block
+        bfree(ip->dev, a[j]);
+      }
+    }
+    brelse(bp);
+    //释放一级索引的block
+    bfree(ip->dev, ip->addrs[NINDIRECT]);
+    ip->addrs[NINDIRECT] = 0;
   }
 
   ip->size = 0;
