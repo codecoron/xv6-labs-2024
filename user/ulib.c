@@ -81,6 +81,7 @@ gets(char *buf, int max)
   return buf;
 }
 
+//
 int
 stat(const char *n, struct stat *st)
 {
@@ -106,6 +107,7 @@ atoi(const char *s)
   return n;
 }
 
+//将virtual memory 上的 src 移动到 dst
 void*
 memmove(void *vdst, const void *vsrc, int n)
 {
