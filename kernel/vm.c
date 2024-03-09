@@ -255,6 +255,34 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
   return newsz;
 }
 
+
+void vmprint_recursive(pagetable_t pagetable,int level){
+    if(level>=3){
+      return;
+    }
+    for(int i = 0; i < 512; i++){
+        pte_t pte = pagetable[i];
+        // PTE_V 标记页表项是否可用
+        if(pte & PTE_V){
+            for(int j=0;j<level;j++){
+              printf(".. ");
+            }
+            pagetable_t pgtbl1 = (pagetable_t)PTE2PA(pte);
+            printf("..%d: pte %p  pa %p\n",i,pte,pagetable);
+            vmprint_recursive(pgtbl1,level+1);
+        }
+    }
+    return ;
+}
+
+void vmprint(pagetable_t pagetable){
+
+    printf("page table %p\n", pagetable);
+    vmprint_recursive(pagetable,0);
+    return ;
+    
+}
+
 // Deallocate user pages to bring the process size from oldsz to
 // newsz.  oldsz and newsz need not be page-aligned, nor does newsz
 // need to be less than oldsz.  oldsz can be larger than the actual
