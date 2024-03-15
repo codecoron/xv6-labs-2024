@@ -91,3 +91,14 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+
+uint64
+sys_trace(void){
+  // trace 32 grep hello README
+  int mask;
+  argint(0, &mask);
+
+  myproc()->trace_bmp  = mask;
+  return 0;
+}
