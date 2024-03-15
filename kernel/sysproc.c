@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -102,3 +103,26 @@ sys_trace(void){
   myproc()->trace_bmp  = mask;
   return 0;
 }
+
+uint64
+sys_sysinfo(void)
+{
+  struct sysinfo info;
+  info.freemem = freemem();
+  info.nproc = procnum();
+
+  uint64 addr;
+  argaddr(0, &addr);
+
+  if(copyout(myproc()->pagetable, addr, (char *)&info, sizeof(info)) < 0)
+    return -1;
+  return 0;
+
+}
+
+/*
+1. pagetable_t 可以从`proc`结构体获取
+2. dstva  目的虚拟地址----通过argaddr() 获取到一个用户地址，本质上是通过proc->trapframe获取。然后这个va能不能用，不知道，只确保地址是合法的。能不能用交给copyout去遍历。
+3. src是源数据地址（应该也是虚拟地址）--- 就是sysinfo的地址
+4. len可以根据实际的数据大小填写
+*/
